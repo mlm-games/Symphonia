@@ -25,13 +25,13 @@ pub struct HvcCAtom {
 
 impl Atom for HvcCAtom {
     fn read<R: ReadAtom>(it: &mut AtomIterator<R>, header: &AtomHeader) -> Result<Self> {
-        const MAX_HVCC_ATOM_SIZE: u64 = 1 * 1024;
+        const MAX_HVCC_ATOM_SIZE: u64 = 16 * 1024;
 
         // The HEVCConfiguration atom payload is a single HEVCDecoderConfigurationRecord. This
-        // record forms the defacto codec extra data. It should not exceed 1 kB.
+        // record forms the defacto codec extra data. It should not exceed 16 kB.
         let len = match header.data_size() {
             Some(len) if len <= MAX_HVCC_ATOM_SIZE => len as usize,
-            Some(_) => return decode_error("isomp4 (hvcC): atom size is greater than 1 kb"),
+            Some(_) => return decode_error("isomp4 (hvcC): atom size is greater than 16 kb"),
             None => return decode_error("isomp4 (hvcC): expected atom size to be known"),
         };
 
