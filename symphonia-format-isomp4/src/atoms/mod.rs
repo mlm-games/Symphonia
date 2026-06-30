@@ -648,13 +648,11 @@ impl<R: ReadAtom> AtomIterator<R> {
 
             if pos == parent_end {
                 return Ok(None);
-            }
-            else if pos > parent_end {
+            } else if pos > parent_end {
                 // The parent atom was overrun.
                 log::warn!("overran atom by {} bytes", pos - parent_end);
                 return Err(AtomError::Overrun);
-            }
-            else if parent_end - pos < u64::from(AtomHeader::HEADER_SIZE) {
+            } else if parent_end - pos < u64::from(AtomHeader::HEADER_SIZE) {
                 // Remaining data length is not enough for another atom header to be read.
                 // Iteration of the current parent atom is done.
                 return Ok(None);
@@ -809,14 +807,12 @@ impl<R: ReadAtom> AtomIterator<R> {
             if self.reader.is_seekable() {
                 // Fallback to a slow seek if the stream is seekable.
                 self.reader.seek(SeekFrom::Start(pos))?;
-            }
-            else if pos > self.reader.pos() {
+            } else if pos > self.reader.pos() {
                 // The stream is not seekable but the desired seek position is ahead of the reader's
                 // current position, thus the seek can be emulated by ignoring the bytes up to the
                 // the desired seek position.
                 self.reader.ignore_bytes(pos - self.reader.pos())?;
-            }
-            else {
+            } else {
                 // The stream is not seekable and the desired seek position falls outside the lower
                 // bound of the buffer cache. This sample cannot be read.
                 return Err(AtomError::SeekOutOfRange);
@@ -856,9 +852,11 @@ impl<R: ReadAtom> AtomIterator<R> {
     where
         R: MediaSource,
     {
-        // Must currently have a pending atom to allow resynchronizing to it.
-        let _ = self.pending.as_ref().ok_or(AtomError::NoPendingAtom)?;
-
+        // If there is a pending atom, resync by seeking to its end first.
+        // If there is no pending atom (eg: after a seek), seek directly.
+        if self.pending.is_some() {
+            self.seek_atom_end()?;
+        }
         // Seek to the desired position. Doesn't seek if already in position.
         self.seek_reader(pos)?;
 
