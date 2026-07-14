@@ -12,7 +12,7 @@ use extra_data::{
 use log::warn;
 
 use symphonia_common::mpeg::video::{
-    AVCDecoderConfigurationRecord, HEVCDecoderConfigurationRecord,
+    AV1DecoderConfigurationRecord, AVCDecoderConfigurationRecord, HEVCDecoderConfigurationRecord,
 };
 use symphonia_common::xiph::audio::flac::{MetadataBlockHeader, MetadataBlockType, StreamInfo};
 use symphonia_core::audio::Channels;
@@ -382,6 +382,14 @@ fn get_codec_profile_and_level(track: &TrackElement) -> (Option<CodecProfile>, O
                 .codec_private
                 .as_ref()
                 .and_then(|buf| HEVCDecoderConfigurationRecord::read(buf).ok())
+                .map(|cfg| (Some(cfg.profile), Some(cfg.level)))
+                .unwrap_or_else(|| (None, None))
+        }
+        "V_AV1" => {
+            track
+                .codec_private
+                .as_ref()
+                .and_then(|buf| AV1DecoderConfigurationRecord::read(buf).ok())
                 .map(|cfg| (Some(cfg.profile), Some(cfg.level)))
                 .unwrap_or_else(|| (None, None))
         }

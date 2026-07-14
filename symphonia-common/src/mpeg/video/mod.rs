@@ -89,6 +89,40 @@ pub struct DOVIDecoderConfigurationRecord {
     pub dv_bl_signal_compatibility_id: u8,
 }
 
+/// See <https://aomediacodec.github.io/av1-isobmff/#av1codecconfigurationbox-syntax>
+pub struct AV1DecoderConfigurationRecord {
+    pub profile: CodecProfile,
+    pub level: u32,
+}
+
+impl AV1DecoderConfigurationRecord {
+    pub fn read(buf: &[u8]) -> Result<Self> {
+        if buf.len() < 4 {
+            return decode_error("common (av1): av1 decoder configuration record too short");
+        }
+
+        let mut br = BitReaderLtr::new(buf);
+
+        let marker = br.read_bool()?;
+        if !marker {
+            return decode_error("common (av1): marker bit must be 1");
+        }
+
+        let version = br.read_bits_leq32(7)?;
+        if version != 1 {
+            return decode_error("common (av1): unexpected version (expected 1)");
+        }
+
+        let seq_profile = br.read_bits_leq32(3)?;
+        let seq_level_idx_0 = br.read_bits_leq32(5)?;
+
+        Ok(AV1DecoderConfigurationRecord {
+            profile: CodecProfile::new(seq_profile),
+            level: seq_level_idx_0,
+        })
+    }
+}
+
 impl DOVIDecoderConfigurationRecord {
     pub fn read(buf: &[u8]) -> Result<Self> {
         let mut br = BitReaderLtr::new(buf);
