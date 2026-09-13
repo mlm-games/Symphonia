@@ -280,6 +280,20 @@ impl<'s> MkvReader<'s> {
         let mut tracks = Vec::new();
         let mut track_states = HashMap::new();
 
+        // Segment `Duration` is optional and often omitted by browser MediaRecorder.
+        // When missing, fall back to the max Cue time (header-only,
+        // no packet scan) so `track.duration` are populated instead of None.
+        let cues_max_ns: Option<u64> =
+            cues.as_ref().and_then(|c| c.points.iter().map(|p| p.time.get()).max());
+
+        if info.duration.is_none() {
+            if let Some(ns) = cues_max_ns {
+                log::debug!("mkv: info duration missing, using max cue time {ns}ns");
+            } else {
+                log::debug!("mkv: info duration and cues both missing, duration unknown");
+            }
+        }
+
         for track in segment_tracks.tracks {
             // The track's timebase is scaled by the track timestamp scale.
             let track_time_base = time_base
@@ -302,10 +316,20 @@ impl<'s> MkvReader<'s> {
 
             tr.with_time_base(track_time_base);
 
+            // `track.duration` was never set from `Segment` `Duration`.
+            if let Some(duration) = info.duration {
+                tr.with_duration(Duration::new(duration.get().round() as u64));
+            } else if let Some(ns) = cues_max_ns {
+                // Convert cue time (ns) into this track's ticks.
+                let ticks = MatroskaTicks::from(ns).into_track_ticks(track_time_base).get();
+                if ticks > 0 {
+                    tr.with_duration(Duration::new(ticks));
+                }
+            }
+
             if let Some(lang_bcp47) = &track.lang_bcp47 {
                 tr.with_language(lang_bcp47);
-            }
-            else {
+            } else {
                 tr.with_language(&track.lang);
             }
 
@@ -326,6 +350,11 @@ impl<'s> MkvReader<'s> {
 
         if let Some(duration) = info.duration {
             media_info.with_duration(Duration::new(duration.get().round() as u64));
+        } else if let Some(ns) = cues_max_ns {
+            let ticks = MatroskaTicks::from(ns).into_segment_ticks(time_base).get();
+            if ticks > 0 {
+                media_info.with_duration(Duration::new(ticks));
+            }
         }
 
         Ok(Self {
@@ -354,8 +383,7 @@ impl<'s> MkvReader<'s> {
 
                 if next_frame_pts >= ts && frame.track_num == track_id {
                     break 'out frame.pts.into_ts();
-                }
-                else {
+                } else {
                     self.frames.pop_front();
                 }
             }
@@ -503,15 +531,13 @@ impl<'s> MkvReader<'s> {
                     }
                     block_type @ (MkvElement::SimpleBlock | MkvElement::BlockGroup) => {
                         // Get the current cluster information.
-                        let Some(cluster) = self.current_cluster.as_ref()
-                        else {
+                        let Some(cluster) = self.current_cluster.as_ref() else {
                             log::warn!("expected to have cluster");
                             return Ok(true);
                         };
 
                         // Get the cluster timestamp.
-                        let Some(cluster_ts) = cluster.timestamp
-                        else {
+                        let Some(cluster_ts) = cluster.timestamp else {
                             log::warn!("missing cluster timestamp");
                             return Ok(true);
                         };
