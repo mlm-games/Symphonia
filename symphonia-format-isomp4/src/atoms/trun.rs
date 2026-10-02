@@ -27,6 +27,8 @@ pub struct TrunAtom {
     pub sample_size: Vec<u32>,
     /// Sample flags for each sample in this run.
     pub sample_flags: Vec<u32>,
+    /// Composition time offset for each sample in this run.
+    sample_composition_offsets: Vec<i64>,
     /// The total size of all samples in this run. 0 if the sample size flag is not set.
     total_sample_size: u64,
     /// The total duration of all samples in this run. 0 if the sample duration flag is not set.
@@ -75,9 +77,20 @@ impl TrunAtom {
     }
 
     /// Indicates if sample composition time offsets are provided.
-    #[allow(dead_code)]
     pub fn are_sample_composition_time_offsets_present(&self) -> bool {
         self.flags & TrunAtom::SAMPLE_COMPOSITION_TIME_OFFSETS_PRESENT != 0
+    }
+
+    /// Get the composition time offset of the sample indicated by `sample_num_rel`.
+    pub fn sample_composition_offset(&self, sample_num_rel: u32) -> i64 {
+        if !self.are_sample_composition_time_offsets_present() {
+            return 0;
+        }
+
+        self.sample_composition_offsets
+            .get(sample_num_rel as usize)
+            .copied()
+            .unwrap_or(0)
     }
 
     /// Gets the total duration of all samples.
@@ -200,48 +213,11 @@ impl TrunAtom {
             (offset, default_size)
         }
     }
-
-    /// Get the sample number (relative to the trun) of the sample that contains timestamp `ts`.
-    pub fn ts_sample(&self, ts_rel: u64, default_dur: u32) -> u32 {
-        let mut sample_num = 0;
-        let mut ts_delta = ts_rel;
-
-        if self.is_sample_duration_present() {
-            // If the sample durations are present, then each sample duration is independently
-            // stored. Sum sample durations until the delta is reached.
-            for &dur in &self.sample_duration {
-                if u64::from(dur) > ts_delta {
-                    break;
-                }
-
-                ts_delta -= u64::from(dur);
-                sample_num += 1;
-            }
-        }
-        else {
-            if self.sample_count > 0 && self.is_first_sample_duration_present() {
-                // The first sample duration is unique.
-                let first_sample_dur = u64::from(self.sample_duration[0]);
-
-                if ts_delta >= first_sample_dur {
-                    ts_delta -= first_sample_dur;
-                    sample_num += 1;
-                }
-                else {
-                    ts_delta -= ts_delta;
-                }
-            }
-
-            sample_num += ts_delta.checked_div(u64::from(default_dur)).unwrap_or(0) as u32;
-        }
-
-        sample_num
-    }
 }
 
 impl Atom for TrunAtom {
     fn read<R: ReadAtom>(it: &mut AtomIterator<R>, _header: &AtomHeader) -> Result<Self> {
-        let (_, flags) = it.read_extended_header()?;
+        let (version, flags) = it.read_extended_header()?;
 
         let sample_count = it.read_u32()?;
 
@@ -267,6 +243,7 @@ impl Atom for TrunAtom {
         let mut sample_duration = Vec::new();
         let mut sample_size = Vec::new();
         let mut sample_flags = Vec::new();
+        let mut sample_composition_offsets = Vec::new();
 
         let mut total_sample_size = 0;
         let mut total_sample_duration = 0;
@@ -288,11 +265,12 @@ impl Atom for TrunAtom {
                 sample_flags.push(it.read_u32()?);
             }
 
-            // Ignoring composition time for now since it's a video thing...
             if (flags & TrunAtom::SAMPLE_COMPOSITION_TIME_OFFSETS_PRESENT) != 0 {
-                // For version 0, this is a u32.
-                // For version 1, this is a i32.
-                let _ = it.read_u32()?;
+                // For version 0, this is a u32. For version 1, this is a i32.
+                sample_composition_offsets.push(match version {
+                    1 => i64::from(it.read_i32()?),
+                    _ => i64::from(it.read_u32()?),
+                });
             }
         }
 
@@ -304,6 +282,7 @@ impl Atom for TrunAtom {
             sample_duration,
             sample_size,
             sample_flags,
+            sample_composition_offsets,
             total_sample_size,
             total_sample_duration,
         })

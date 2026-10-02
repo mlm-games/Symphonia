@@ -24,8 +24,10 @@ pub struct SampleDataDesc {
 
 /// Timing information for one sample.
 pub struct SampleTiming {
-    /// The timestamp of the sample.
-    pub ts: u64,
+    /// The decode timestamp of the sample.
+    pub dts: u64,
+    /// The presentation timestamp of the sample.
+    pub pts: i64,
     /// The duration of the sample.
     pub dur: u32,
 }
@@ -43,13 +45,13 @@ pub trait StreamSegment: Send + Sync {
     /// Gets the first and last sample timestamps for the track `track_num`.
     fn track_ts_range(&self, track_num: usize) -> Range<u64>;
 
-    /// Get the timestamp and duration for the sample indicated by `sample_num` for the track
-    /// `track_num`.
+    /// Get the decode timestamp, presentation timestamp and duration for the sample indicated by
+    /// `sample_num` for the track `track_num`.
     fn sample_timing(&self, track_num: usize, sample_num: u32) -> Result<Option<SampleTiming>>;
 
-    /// Get the sample number of the sample containing the timestamp indicated by `ts` for track
-    // `track_num`.
-    fn ts_sample(&self, track_num: usize, ts: u64) -> Result<Option<u32>>;
+    /// Get the sample number of the sample containing the presentation timestamp indicated by
+    /// `pts` for track `track_num`.
+    fn pts_sample(&self, track_num: usize, pts: u64) -> Result<Option<u32>>;
 
     /// Get the byte position of the group of samples containing the sample indicated by
     /// `sample_num` for track `track_num`, and it's size.
@@ -151,6 +153,7 @@ impl StreamSegment for MoofSegment {
 
         let mut sample_num_rel = sample_num - self.seq[track_num].first_sample;
         let mut trun_ts_offset = self.seq[track_num].first_ts;
+        let media_start_time = self.moov.traks[track_num].media_start_time();
 
         let mvex = match self.moov.mvex.as_ref() {
             Some(v) => v,
@@ -166,7 +169,13 @@ impl StreamSegment for MoofSegment {
             // sample.
             if sample_num_rel < trun.sample_count {
                 let (ts, dur) = trun.sample_timing(sample_num_rel, default_dur);
-                return Ok(Some(SampleTiming { ts: trun_ts_offset + ts, dur }));
+                let dts = trun_ts_offset.saturating_add(ts);
+                let pts = i64::try_from(dts)
+                    .unwrap_or(i64::MAX)
+                    .saturating_add(trun.sample_composition_offset(sample_num_rel))
+                    .saturating_sub(media_start_time);
+
+                return Ok(Some(SampleTiming { dts, pts, dur }));
             }
 
             let trun_dur = trun.total_duration(default_dur);
@@ -178,7 +187,7 @@ impl StreamSegment for MoofSegment {
         Ok(None)
     }
 
-    fn ts_sample(&self, track_num: usize, ts: u64) -> Result<Option<u32>> {
+    fn pts_sample(&self, track_num: usize, pts: u64) -> Result<Option<u32>> {
         // Get the track fragment associated with track_num.
         let traf = match self.try_get_traf(track_num) {
             Some(traf) => traf,
@@ -187,6 +196,9 @@ impl StreamSegment for MoofSegment {
 
         let mut sample_num = self.seq[track_num].first_sample;
         let mut ts_accum = self.seq[track_num].first_ts;
+        let target = i64::try_from(pts)
+            .unwrap_or(i64::MAX)
+            .saturating_add(self.moov.traks[track_num].media_start_time());
 
         let mvex = match self.moov.mvex.as_ref() {
             Some(v) => v,
@@ -198,18 +210,20 @@ impl StreamSegment for MoofSegment {
             .unwrap_or(mvex.trexs[track_num].default_sample_duration);
 
         for trun in traf.truns.iter() {
-            // Get the total duration of this track run.
-            let trun_dur = trun.total_duration(default_dur);
+            for sample_num_rel in 0..trun.sample_count {
+                let (ts, dur) = trun.sample_timing(sample_num_rel, default_dur);
+                let sample_pts = i64::try_from(ts_accum.saturating_add(ts))
+                    .unwrap_or(i64::MAX)
+                    .saturating_add(trun.sample_composition_offset(sample_num_rel));
 
-            // If the timestamp after the track run is greater than the desired timestamp, then the
-            // desired sample must be in this run of samples.
-            if ts_accum + trun_dur > ts {
-                sample_num += trun.ts_sample(ts - ts_accum, default_dur);
-                return Ok(Some(sample_num));
+                if sample_pts.saturating_add(i64::from(dur)) > target {
+                    return Ok(Some(sample_num));
+                }
+
+                sample_num += 1;
             }
 
-            sample_num += trun.sample_count;
-            ts_accum += trun_dur;
+            ts_accum += trun.total_duration(default_dur);
         }
 
         Ok(None)
@@ -371,17 +385,23 @@ impl StreamSegment for MoovSegment {
         // Find the sample timing. Note, complexity of O(N).
         let timing = trak.mdia.minf.stbl.stts.find_timing_for_sample(sample_num);
 
-        if let Some((ts, dur)) = timing { Ok(Some(SampleTiming { ts, dur })) } else { Ok(None) }
+        if let Some((dts, dur)) = timing {
+            let pts = trak.presentation_timestamp(dts, sample_num);
+            Ok(Some(SampleTiming { dts, pts, dur }))
+        }
+        else {
+            Ok(None)
+        }
     }
 
-    fn ts_sample(&self, track_num: usize, ts: u64) -> Result<Option<u32>> {
+    fn pts_sample(&self, track_num: usize, pts: u64) -> Result<Option<u32>> {
         // Get the trak atom associated with track_num.
         debug_assert!(track_num < self.moov.traks.len());
 
         let trak = &self.moov.traks[track_num];
 
-        // Find the sample timestamp. Note, complexity of O(N).
-        Ok(trak.mdia.minf.stbl.stts.find_sample_for_timestamp(ts))
+        // Find the sample. Note, complexity of O(N).
+        Ok(trak.find_sample_for_pts(pts))
     }
 
     fn sample_data(

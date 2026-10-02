@@ -93,8 +93,10 @@ struct NextSampleInfo {
     track_num: usize,
     /// The track id.
     track_id: u32,
-    /// The timestamp of the next sample.
-    ts: Timestamp,
+    /// The decode timestamp of the next sample.
+    dts: Timestamp,
+    /// The presentation timestamp of the next sample.
+    pts: Timestamp,
     /// The timestamp expressed in seconds.
     time: Time,
     /// The duration of the next sample.
@@ -358,13 +360,17 @@ impl<'s> IsoMp4Reader<'s> {
             for (seg_idx_delta, seg) in self.segs[state.cur_seg..].iter().enumerate() {
                 // Try to get the timestamp for the next sample of the track from the segment.
                 if let Some(timing) = seg.sample_timing(state.track_num, state.next_sample)? {
-                    // Calculate the presentation time using the timestamp.
-                    let Some(ts) = timing.ts.try_into().ok()
+                    // Calculate the presentation time using the decode timestamp. Tracks are
+                    // interleaved by decode time so that samples are always handed out in the
+                    // order they must be decoded.
+                    let Some(dts) = timing.dts.try_into().ok()
                     else {
                         return Ok(None);
                     };
 
-                    let Some(sample_time) = tb.calc_time(ts)
+                    let pts = Timestamp::from(timing.pts);
+
+                    let Some(sample_time) = tb.calc_time(dts)
                     else {
                         return Ok(None);
                     };
@@ -382,7 +388,8 @@ impl<'s> IsoMp4Reader<'s> {
                             earliest = Some(NextSampleInfo {
                                 track_num: state.track_num,
                                 track_id: state.track_id,
-                                ts,
+                                dts,
+                                pts,
                                 time: sample_time,
                                 dur: Duration::from(timing.dur),
                                 seg_idx: seg_idx_delta + state.cur_seg,
@@ -528,7 +535,7 @@ impl<'s> IsoMp4Reader<'s> {
             // Iterate over all segments and attempt to find the segment and sample number that
             // contains the desired timestamp. Skip segments already examined.
             for (seg_idx, seg) in self.segs.iter().enumerate().skip(seg_skip) {
-                if let Some(sample_num) = seg.ts_sample(track_num, ts.get() as u64)? {
+                if let Some(sample_num) = seg.pts_sample(track_num, ts.get() as u64)? {
                     break 'locate SeekLocation { seg_idx, sample_num };
                 }
 
@@ -551,10 +558,7 @@ impl<'s> IsoMp4Reader<'s> {
         };
 
         // Try to convert the sample timing to a timestamp.
-        let actual_ts = match Timestamp::try_from(timing.ts) {
-            Ok(ts) => ts,
-            _ => return seek_error(SeekErrorKind::OutOfRange),
-        };
+        let actual_ts = Timestamp::from(timing.pts);
 
         // Get the sample information.
         let data_desc = seg.sample_data(track_num, seek_loc.sample_num, true)?;
@@ -652,12 +656,15 @@ impl FormatReader for IsoMp4Reader<'_> {
         let data =
             self.iter.read_raw_boxed_slice_exact(sample_info.pos, sample_info.len as usize)?;
 
-        Ok(Some(Packet::new(
+        let mut packet = Packet::new(
             next_sample_info.track_id,
-            next_sample_info.ts,
+            next_sample_info.pts,
             next_sample_info.dur,
             data,
-        )))
+        );
+        packet.dts = next_sample_info.dts;
+
+        Ok(Some(packet))
     }
 
     fn metadata(&mut self) -> Metadata<'_> {

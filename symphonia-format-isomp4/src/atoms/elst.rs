@@ -27,6 +27,14 @@ pub struct ElstAtom {
     entries: Vec<ElstEntry>,
 }
 
+impl ElstAtom {
+    /// Get the media time, in media timescale units, at which the first edit of this track starts.
+    /// Empty edits do not reference the media and contribute no offset.
+    pub fn first_media_time(&self) -> i64 {
+        self.entries.first().map_or(0, |entry| entry.media_time.max(0))
+    }
+}
+
 impl Atom for ElstAtom {
     fn read<R: ReadAtom>(it: &mut AtomIterator<R>, _header: &AtomHeader) -> Result<Self> {
         let (version, _) = it.read_extended_header()?;
