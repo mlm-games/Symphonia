@@ -166,8 +166,7 @@ impl<'s> IsoMp4Reader<'s> {
             mss.seek(SeekFrom::Start(pos))?;
             info!("stream is seekable with len={len} bytes.");
             Some(len)
-        }
-        else {
+        } else {
             None
         };
 
@@ -280,8 +279,7 @@ impl<'s> IsoMp4Reader<'s> {
         if moov.is_fragmented() {
             if !sidx_timespans.is_empty() {
                 info!("stream is segmented with a segment index.");
-            }
-            else {
+            } else {
                 info!("stream is segmented without a segment index.");
             }
         }
@@ -305,8 +303,7 @@ impl<'s> IsoMp4Reader<'s> {
                     .unwrap_or_else(|| {
                         TimeSpan::new(trak.mdia.mdhd.timescale, trak.mdia.mdhd.duration.into())
                     })
-            }
-            else {
+            } else {
                 // If non-fragmented, use the total duration (media timescale) from the track's
                 // stts atom. Since edits are not currently supported, this is the duration of all
                 // samples that will be yielded.
@@ -363,15 +360,13 @@ impl<'s> IsoMp4Reader<'s> {
                     // Calculate the presentation time using the decode timestamp. Tracks are
                     // interleaved by decode time so that samples are always handed out in the
                     // order they must be decoded.
-                    let Some(dts) = timing.dts.try_into().ok()
-                    else {
+                    let Some(dts) = timing.dts.try_into().ok() else {
                         return Ok(None);
                     };
 
                     let pts = Timestamp::from(timing.pts);
 
-                    let Some(sample_time) = tb.calc_time(dts)
-                    else {
+                    let Some(sample_time) = tb.calc_time(dts) else {
                         return Ok(None);
                     };
 
@@ -424,8 +419,7 @@ impl<'s> IsoMp4Reader<'s> {
         // then the base position is the position of current the sample.
         let pos = if sample_data_desc.base_pos > track.next_sample_pos {
             sample_data_desc.base_pos
-        }
-        else {
+        } else {
             track.next_sample_pos
         };
 
@@ -489,8 +483,7 @@ impl<'s> IsoMp4Reader<'s> {
 
                         // Push the segment.
                         self.segs.push(Box::new(seg));
-                    }
-                    else {
+                    } else {
                         return decode_error("isomp4: moof atom present without mvex atom");
                     }
                 }
@@ -510,8 +503,7 @@ impl<'s> IsoMp4Reader<'s> {
             let tb = track.time_base.expect("track always created with a timebase");
             let ts = tb.calc_timestamp(time).ok_or(Error::SeekError(SeekErrorKind::OutOfRange))?;
             self.seek_track_by_ts(track_num, ts)
-        }
-        else {
+        } else {
             seek_error(SeekErrorKind::Unseekable)
         }
     }
@@ -625,8 +617,7 @@ impl FormatReader for IsoMp4Reader<'_> {
             // Using the current set of segments, try to get the next sample info.
             if let Some(info) = self.next_sample_info()? {
                 break info;
-            }
-            else {
+            } else {
                 // The inner reader of the atom iterator has been used/seeked around to read
                 // packets, so resync the reader and iterator by seeking to the end of the current
                 // pending atom. Under regular circumstances, no actual expensive seek operation is
@@ -705,8 +696,7 @@ impl FormatReader for IsoMp4Reader<'_> {
 
                     // Seek the primary track and return the result.
                     self.seek_track_by_ts(track_num, ts)
-                }
-                else {
+                } else {
                     seek_error(SeekErrorKind::InvalidTrack)
                 }
             }

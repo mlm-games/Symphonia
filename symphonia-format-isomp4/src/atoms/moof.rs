@@ -40,8 +40,7 @@ impl Atom for MoofAtom {
             }
         }
 
-        let Some(mfhd) = mfhd
-        else {
+        let Some(mfhd) = mfhd else {
             return decode_error("isomp4 (moof): missing mfhd atom");
         };
 

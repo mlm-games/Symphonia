@@ -50,8 +50,7 @@ impl Atom for EsdsAtom {
             }
         }
 
-        let Some(es_desc) = descriptor
-        else {
+        let Some(es_desc) = descriptor else {
             return decode_error("isomp4 (esds): missing es descriptor in esds");
         };
 

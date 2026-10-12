@@ -39,16 +39,13 @@ impl Atom for MdiaAtom {
             }
         }
 
-        let Some(mdhd) = mdhd
-        else {
+        let Some(mdhd) = mdhd else {
             return decode_error("isomp4 (mdia): missing mdhd atom");
         };
-        let Some(hdlr) = hdlr
-        else {
+        let Some(hdlr) = hdlr else {
             return decode_error("isomp4 (mdia): missing hdlr atom");
         };
-        let Some(minf) = minf
-        else {
+        let Some(minf) = minf else {
             return decode_error("isomp4 (mdia): missing minf atom");
         };
 

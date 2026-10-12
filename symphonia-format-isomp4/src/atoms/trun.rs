@@ -87,25 +87,20 @@ impl TrunAtom {
             return 0;
         }
 
-        self.sample_composition_offsets
-            .get(sample_num_rel as usize)
-            .copied()
-            .unwrap_or(0)
+        self.sample_composition_offsets.get(sample_num_rel as usize).copied().unwrap_or(0)
     }
 
     /// Gets the total duration of all samples.
     pub fn total_duration(&self, default_dur: u32) -> u64 {
         if self.is_sample_duration_present() {
             self.total_sample_duration
-        }
-        else {
+        } else {
             // The duration of all samples in the track fragment are not explictly known.
             if self.sample_count > 0 && self.is_first_sample_duration_present() {
                 // The first sample has an explictly recorded duration.
                 u64::from(self.sample_duration[0])
                     + u64::from(self.sample_count - 1) * u64::from(default_dur)
-            }
-            else {
+            } else {
                 // All samples have the default duration.
                 u64::from(self.sample_count) * u64::from(default_dur)
             }
@@ -116,12 +111,10 @@ impl TrunAtom {
     pub fn total_size(&self, default_size: u32) -> u64 {
         if self.is_sample_size_present() {
             self.total_sample_size
-        }
-        else if self.sample_count > 0 && self.is_first_sample_size_present() {
+        } else if self.sample_count > 0 && self.is_first_sample_size_present() {
             u64::from(self.sample_size[0])
                 + u64::from(self.sample_count - 1) * u64::from(default_size)
-        }
-        else {
+        } else {
             u64::from(self.sample_count) * u64::from(default_size)
         }
     }
@@ -138,23 +131,20 @@ impl TrunAtom {
                     .iter()
                     .map(|&s| u64::from(s))
                     .sum::<u64>()
-            }
-            else {
+            } else {
                 0
             };
 
             let dur = self.sample_duration[sample_num_rel as usize];
 
             (ts, dur)
-        }
-        else {
+        } else {
             // The duration of all samples in the track fragment are not unique.
             let ts = if sample_num_rel > 0 && self.is_first_sample_duration_present() {
                 // The first sample has a unique duration.
                 u64::from(self.sample_duration[0])
                     + u64::from(sample_num_rel - 1) * u64::from(default_dur)
-            }
-            else {
+            } else {
                 // Zero or more samples with identical durations.
                 u64::from(sample_num_rel) * u64::from(default_dur)
             };
@@ -170,11 +160,9 @@ impl TrunAtom {
 
         if self.is_sample_size_present() {
             self.sample_size[sample_num_rel as usize]
-        }
-        else if sample_num_rel == 0 && self.is_first_sample_size_present() {
+        } else if sample_num_rel == 0 && self.is_first_sample_size_present() {
             self.sample_size[0]
-        }
-        else {
+        } else {
             default_size
         }
     }
@@ -191,21 +179,18 @@ impl TrunAtom {
                     .iter()
                     .map(|&s| u64::from(s))
                     .sum::<u64>()
-            }
-            else {
+            } else {
                 0
             };
 
             (offset, self.sample_size[sample_num_rel as usize])
-        }
-        else {
+        } else {
             // The size of all samples in the track are not unique.
             let offset = if sample_num_rel > 0 && self.is_first_sample_size_present() {
                 // The first sample has a unique size.
                 u64::from(self.sample_size[0])
                     + u64::from(sample_num_rel - 1) * u64::from(default_size)
-            }
-            else {
+            } else {
                 // Zero or more identically sized samples.
                 u64::from(sample_num_rel) * u64::from(default_size)
             };

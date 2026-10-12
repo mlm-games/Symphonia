@@ -81,20 +81,16 @@ impl Atom for StblAtom {
             warn!("missing stco or co64 atom");
         }
 
-        let Some(stsd) = stsd
-        else {
+        let Some(stsd) = stsd else {
             return decode_error("isomp4 (stbl): missing stsd atom");
         };
-        let Some(stts) = stts
-        else {
+        let Some(stts) = stts else {
             return decode_error("isomp4 (stbl): missing stts atom");
         };
-        let Some(stsc) = stsc
-        else {
+        let Some(stsc) = stsc else {
             return decode_error("isomp4 (stbl): missing stsc atom");
         };
-        let Some(stsz) = stsz
-        else {
+        let Some(stsz) = stsz else {
             return decode_error("isomp4 (stbl): missing stsz atom");
         };
 

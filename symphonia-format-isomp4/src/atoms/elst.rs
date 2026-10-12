@@ -28,10 +28,26 @@ pub struct ElstAtom {
 }
 
 impl ElstAtom {
-    /// Get the media time, in media timescale units, at which the first edit of this track starts.
-    /// Empty edits do not reference the media and contribute no offset.
-    pub fn first_media_time(&self) -> i64 {
-        self.entries.first().map_or(0, |entry| entry.media_time.max(0))
+    /// Get the media time, in media timescale units, at which the presentation of this track
+    /// starts. Leading empty edits delay the presentation; their segment duration is expressed
+    /// in movie timescale units and is converted to media timescale units here.
+    pub fn first_media_time(&self, movie_timescale: u32, media_timescale: u32) -> i64 {
+        let media_timescale = i128::from(media_timescale);
+        let movie_timescale = i128::from(movie_timescale.max(1));
+
+        let mut empty_duration = 0i128;
+
+        for entry in &self.entries {
+            if entry.media_time >= 0 {
+                let start = i128::from(entry.media_time) - empty_duration;
+                return start.clamp(i128::from(i64::MIN), i128::from(i64::MAX)) as i64;
+            }
+
+            empty_duration +=
+                i128::from(entry.segment_duration) * media_timescale / movie_timescale;
+        }
+
+        0
     }
 }
 
@@ -71,5 +87,38 @@ impl Atom for ElstAtom {
         }
 
         Ok(ElstAtom { entries })
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{ElstAtom, ElstEntry};
+
+    fn edit(segment_duration: u64, media_time: i64) -> ElstEntry {
+        ElstEntry { segment_duration, media_time, media_rate_int: 1, media_rate_frac: 0 }
+    }
+
+    #[test]
+    fn first_media_time_accounts_for_leading_empty_edits() {
+        // Empty edit spans 45000 movie ticks (== media ticks), then the media edit starts at
+        // media_time 3000. Presentation must begin 45000-3000 ticks after the first sample.
+        let delayed = ElstAtom { entries: vec![edit(45000, -1), edit(918000, 3000)] };
+        assert_eq!(delayed.first_media_time(90000, 90000), 3000 - 45000);
+
+        // Empty edit spans 150 movie ticks at a movie timescale of 10000 and a media timescale
+        // of 48000, i.e. 720 media ticks, and the media edit starts at media_time 0.
+        let audio = ElstAtom { entries: vec![edit(150, -1), edit(85573, 0)] };
+        assert_eq!(audio.first_media_time(10000, 48000), -720);
+    }
+
+    #[test]
+    fn first_media_time_without_a_leading_empty_edit() {
+        let media_time_only = ElstAtom { entries: vec![edit(918000, 1001)] };
+        assert_eq!(media_time_only.first_media_time(90000, 90000), 1001);
+
+        let empty_only = ElstAtom { entries: vec![edit(45000, -1)] };
+        assert_eq!(empty_only.first_media_time(90000, 90000), 0);
+
+        assert_eq!(ElstAtom { entries: vec![] }.first_media_time(90000, 90000), 0);
     }
 }

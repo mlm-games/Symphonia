@@ -24,13 +24,14 @@ use symphonia_core::codecs::audio::{
 };
 use symphonia_core::codecs::subtitle::SubtitleCodecParameters;
 use symphonia_core::codecs::subtitle::well_known::CODEC_ID_MOV_TEXT;
+use symphonia_core::codecs::video::well_known::{CODEC_ID_VP8, CODEC_ID_VP9};
 use symphonia_core::codecs::video::{VideoCodecId, VideoCodecParameters, VideoExtraData};
 use symphonia_core::codecs::{CodecParameters, CodecProfile};
 
 use crate::atoms::{
     AlacAtom, Atom, AtomHeader, AtomIterator, AtomType, Av1CAtom, AvcCAtom, Dac3Atom, Dec3Atom,
-    DoviAtom, EsdsAtom, FlacAtom, HvcCAtom, OpusAtom, ReadAtom, Result, WaveAtom, decode_error,
-    unsupported_error,
+    DoviAtom, EsdsAtom, FlacAtom, HvcCAtom, OpusAtom, ReadAtom, Result, VpcCAtom, WaveAtom,
+    decode_error, unsupported_error,
 };
 use crate::fp::FpU16;
 
@@ -397,8 +398,7 @@ fn lpcm_codec_id(bits_per_sample: u32, lpcm_flags: u32) -> AudioCodecId {
             64 => CODEC_ID_PCM_F64LE,
             _ => CODEC_ID_NULL_AUDIO,
         }
-    }
-    else {
+    } else {
         // Integer sample format.
         if is_signed {
             // Signed-integer sample format.
@@ -412,8 +412,7 @@ fn lpcm_codec_id(bits_per_sample: u32, lpcm_flags: u32) -> AudioCodecId {
                 32 => CODEC_ID_PCM_S32LE,
                 _ => CODEC_ID_NULL_AUDIO,
             }
-        }
-        else {
+        } else {
             // Unsigned-integer sample format.
             match bits_per_sample {
                 8 => CODEC_ID_PCM_U8,
@@ -497,7 +496,7 @@ impl VisualSampleEntry {
 }
 
 impl Atom for VisualSampleEntry {
-    fn read<R: ReadAtom>(it: &mut AtomIterator<R>, _header: &AtomHeader) -> Result<Self> {
+    fn read<R: ReadAtom>(it: &mut AtomIterator<R>, header: &AtomHeader) -> Result<Self> {
         // SampleEntry portion
 
         // Reserved. All 0.
@@ -517,6 +516,15 @@ impl Atom for VisualSampleEntry {
             horiz_res: f64::from(FpU16::parse_raw(it.read_u32()?)),
             vert_res: f64::from(FpU16::parse_raw(it.read_u32()?)),
             ..Default::default()
+        };
+
+        // VP8 and VP9 have no config box to identify them by, and `vpcC` is
+        // optional, so the sample entry type is the only reliable source. Left
+        // unset the track reports CODEC_ID_NONE and every consumer skips it.
+        entry.codec_id = match header.atom_type {
+            AtomType::VisualSampleEntryVp8 => CODEC_ID_VP8,
+            AtomType::VisualSampleEntryVp9 => CODEC_ID_VP9,
+            _ => entry.codec_id,
         };
 
         // Reserved.
@@ -561,6 +569,10 @@ impl Atom for VisualSampleEntry {
                 }
                 AtomType::HevcConfiguration => {
                     let atom = it.read_atom::<HvcCAtom>()?;
+                    atom.fill_video_sample_entry(&mut entry);
+                }
+                AtomType::VpConfiguration if entry.codec_id == CODEC_ID_VP9 => {
+                    let atom = it.read_atom::<VpcCAtom>()?;
                     atom.fill_video_sample_entry(&mut entry);
                 }
                 AtomType::DolbyVisionConfiguration => {

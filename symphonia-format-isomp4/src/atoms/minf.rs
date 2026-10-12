@@ -36,8 +36,7 @@ impl Atom for MinfAtom {
             }
         }
 
-        let Some(stbl) = stbl
-        else {
+        let Some(stbl) = stbl else {
             return decode_error("isomp4 (minf): missing stbl atom");
         };
 

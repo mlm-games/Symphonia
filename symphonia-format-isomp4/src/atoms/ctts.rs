@@ -34,8 +34,7 @@ impl CttsAtom {
 
         if sample_num < entry.first_sample.saturating_add(entry.sample_count) {
             Some(entry.sample_offset)
-        }
-        else {
+        } else {
             None
         }
     }
@@ -65,11 +64,7 @@ impl Atom for CttsAtom {
                 _ => i64::from(it.read_u32()?),
             };
 
-            entries.push(CttsEntry {
-                first_sample,
-                sample_count,
-                sample_offset,
-            });
+            entries.push(CttsEntry { first_sample, sample_count, sample_offset });
 
             first_sample = first_sample.saturating_add(sample_count);
         }

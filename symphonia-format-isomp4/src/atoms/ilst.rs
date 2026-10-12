@@ -271,8 +271,7 @@ fn add_generic_tag<R: ReadAtom>(
         if let Some(raw_value) = parse_tag_value(value_atom.data_type, &value_atom.data) {
             let std_tag = map(&raw_value);
             builder.add_tag(Tag::new_from_parts(raw_key, raw_value, std_tag));
-        }
-        else {
+        } else {
             warn!("unsupported data type {:?} for {:?} tag", value_atom.data_type, tag.atom_type);
         }
     }
@@ -402,8 +401,7 @@ fn add_advisory_tag<R: ReadAtom>(
                     StandardTag::ContentAdvisory(advisory),
                 ));
             }
-        }
-        else {
+        } else {
             warn!("unsupported data type {:?} for {:?} tag", value_atom.data_type, tag.atom_type);
         }
     }
@@ -452,8 +450,7 @@ fn add_media_type_tag<R: ReadAtom>(
                     StandardTag::MediaFormat(Arc::new(String::from(media_type))),
                 ));
             }
-        }
-        else {
+        } else {
             warn!("unsupported data type {:?} for {:?} tag", value_atom.data_type, tag.atom_type);
         }
     }
@@ -522,8 +519,7 @@ fn add_rating_tag<R: ReadAtom>(
                     StandardTag::Rating(10_000 * rating),
                 ));
             }
-        }
-        else {
+        } else {
             warn!("unsupported data type {:?} for {:?} tag", value_atom.data_type, tag.atom_type);
         }
     }
@@ -543,8 +539,7 @@ fn add_freeform_tag<R: ReadAtom>(
         if let Some(value) = parse_tag_value(value_atom.data_type, &value_atom.data) {
             // Try to map iTunes freeform tags to standard tag keys.
             let _ = itunes::parse_itunes_tag(tag.full_name(), value, builder);
-        }
-        else {
+        } else {
             warn!("unsupported data type {:?} for freeform tag", value_atom.data_type);
         }
     }

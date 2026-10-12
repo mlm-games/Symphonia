@@ -6,10 +6,10 @@
 // file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
 use symphonia_common::mpeg::video::AV1DecoderConfigurationRecord;
+use symphonia_core::codecs::CodecProfile;
 use symphonia_core::codecs::video::VideoExtraData;
 use symphonia_core::codecs::video::well_known::CODEC_ID_AV1;
 use symphonia_core::codecs::video::well_known::extra_data::VIDEO_EXTRA_DATA_ID_AV1_DECODER_CONFIG;
-use symphonia_core::codecs::CodecProfile;
 
 use crate::atoms::stsd::VisualSampleEntry;
 use crate::atoms::{Atom, AtomHeader, AtomIterator, ReadAtom, Result, decode_error};
@@ -39,16 +39,9 @@ impl Atom for Av1CAtom {
 
         let av1_config = AV1DecoderConfigurationRecord::read(&data)?;
 
-        let extra_data = VideoExtraData {
-            id: VIDEO_EXTRA_DATA_ID_AV1_DECODER_CONFIG,
-            data,
-        };
+        let extra_data = VideoExtraData { id: VIDEO_EXTRA_DATA_ID_AV1_DECODER_CONFIG, data };
 
-        Ok(Self {
-            extra_data,
-            profile: av1_config.profile,
-            level: av1_config.level,
-        })
+        Ok(Self { extra_data, profile: av1_config.profile, level: av1_config.level })
     }
 }
 

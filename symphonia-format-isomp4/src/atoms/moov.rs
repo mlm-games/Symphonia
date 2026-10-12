@@ -66,8 +66,7 @@ impl Atom for MoovAtom {
             }
         }
 
-        let Some(mvhd) = mvhd
-        else {
+        let Some(mvhd) = mvhd else {
             return decode_error("isomp4 (moov): missing mvhd atom");
         };
 

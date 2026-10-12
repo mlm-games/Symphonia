@@ -46,8 +46,7 @@ impl Atom for TrafAtom {
         }
 
         // Tfhd is mandatory.
-        let Some(tfhd) = tfhd
-        else {
+        let Some(tfhd) = tfhd else {
             return decode_error("isomp4 (traf): missing tfhd atom");
         };
 

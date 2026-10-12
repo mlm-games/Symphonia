@@ -25,27 +25,28 @@ pub struct TrakAtom {
 impl TrakAtom {
     /// Get the number of timescale units skipped from the start of the media by the first edit of
     /// this track.
-    pub fn media_start_time(&self) -> i64 {
-        self.edts
-            .as_ref()
-            .and_then(|edts| edts.elst.as_ref())
-            .map_or(0, |elst| elst.first_media_time())
+    pub fn media_start_time(&self, movie_timescale: u32) -> i64 {
+        self.edts.as_ref().and_then(|edts| edts.elst.as_ref()).map_or(0, |elst| {
+            elst.first_media_time(movie_timescale, self.mdia.mdhd.timescale.get())
+        })
     }
 
     /// Get the presentation timestamp of the sample with decode timestamp `dts`.
-    pub fn presentation_timestamp(&self, dts: u64, sample_num: u32) -> i64 {
+    pub fn presentation_timestamp(&self, dts: u64, sample_num: u32, movie_timescale: u32) -> i64 {
         i64::try_from(dts)
             .unwrap_or(i64::MAX)
             .saturating_add(self.mdia.minf.stbl.composition_offset(sample_num))
-            .saturating_sub(self.media_start_time())
+            .saturating_sub(self.media_start_time(movie_timescale))
     }
 
     /// Get the sample number of the sample whose presentation timestamp is contained by `pts`.
     /// Note, the returned sample number is indexed relative to the track. Complexity of this
     /// function in O(N).
-    pub fn find_sample_for_pts(&self, pts: u64) -> Option<u32> {
+    pub fn find_sample_for_pts(&self, pts: u64, movie_timescale: u32) -> Option<u32> {
         let stbl = &self.mdia.minf.stbl;
-        let target = i64::try_from(pts).unwrap_or(i64::MAX).saturating_add(self.media_start_time());
+        let target = i64::try_from(pts)
+            .unwrap_or(i64::MAX)
+            .saturating_add(self.media_start_time(movie_timescale));
 
         let mut sample_num = 0;
         let mut dts: u64 = 0;
@@ -92,13 +93,11 @@ impl Atom for TrakAtom {
             }
         }
 
-        let Some(tkhd) = tkhd
-        else {
+        let Some(tkhd) = tkhd else {
             return decode_error("isomp4 (trak): missing tkhd atom");
         };
 
-        let Some(mdia) = mdia
-        else {
+        let Some(mdia) = mdia else {
             return decode_error("isomp4 (trak): missing mdia atom");
         };
 
