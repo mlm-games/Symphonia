@@ -450,6 +450,8 @@ impl<'s> MkvReader<'s> {
                 target_cue_point.positions.cluster_pos
             );
 
+            self.frames.clear();
+
             // Ascend back to the segment element.
             self.iter.pop_elements_upto(MkvElement::Segment)?;
 
